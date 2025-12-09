@@ -5,7 +5,7 @@ plugins {
 compileJava.options.encoding = 'UTF-8'
 
 group = 'com.hopla'
-version = '2.3.0'
+version = '2.4.0'
 
 // Allow external AI providers (default true, can override with -PexternalAI=true/false)
 def externalAIEnabled = project.hasProperty('externalAI') ? project.property('externalAI').toString().toBoolean() : true
