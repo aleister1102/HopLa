@@ -83,6 +83,13 @@ public class OpenAIProvider extends AIProvider {
             messages.add(userMessage);
         }
 
+        if (chat.getNotes() != null && !chat.getNotes().isBlank()) {
+            JsonObject notesMessage = new JsonObject();
+            notesMessage.addProperty("role", AIChats.MessageRole.SYSTEM.toString());
+            notesMessage.addProperty("content", chat.getNotes());
+            messages.add(notesMessage);
+        }
+
         for (AIChats.Message message : chat.getMessages()) {
             JsonObject userMessage = new JsonObject();
             userMessage.addProperty("role", message.getRole().toString().toLowerCase());

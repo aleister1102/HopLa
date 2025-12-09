@@ -1,14 +1,5 @@
 package com.hopla.ai;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.hopla.Completer;
-import com.hopla.HopLa;
-import okhttp3.Call;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -18,8 +9,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.hopla.Completer;
 import static com.hopla.Constants.DEBUG_AI;
+import com.hopla.HopLa;
 import static com.hopla.Utils.mapToJson;
+
+import okhttp3.Call;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class OllamaProvider extends AIProvider {
 
@@ -39,7 +39,6 @@ public class OllamaProvider extends AIProvider {
         jsonPayload.addProperty("prompt", prompt);
         jsonPayload.addProperty("stream", true);
         jsonPayload.addProperty("keep_alive", "60m");
-
 
         if (!providerConfig.quick_action_system_prompt.isEmpty()) {
             jsonPayload.addProperty("system", providerConfig.quick_action_system_prompt);
@@ -61,15 +60,16 @@ public class OllamaProvider extends AIProvider {
         }
         String jsonString = gson.toJson(jsonPayload);
 
-        if (DEBUG_AI) {
-            HopLa.montoyaApi.logging().logToOutput("quick action request: " + jsonString);
-        }
+        HopLa.montoyaApi.logging().logToOutput("quick action request: " + jsonString);
 
         RequestBody body = RequestBody.create(
                 jsonString,
                 JSON
         );
 
+        if (providerConfig.quick_action_endpoint == null || providerConfig.quick_action_endpoint.isEmpty()) {
+            throw new IOException("Quick action endpoint undefined");
+        }
         Request.Builder builder = new Request.Builder().url(providerConfig.quick_action_endpoint);
 
         for (Map.Entry<String, Object> entry : providerConfig.headers.entrySet()) {
@@ -98,11 +98,9 @@ public class OllamaProvider extends AIProvider {
             HopLa.montoyaApi.logging().logToOutput("Suggestion prompt: " + promptReplace(caretContext, providerConfig.completion_prompt));
         }
 
-
         jsonPayload.addProperty("stream", false);
         jsonPayload.addProperty("raw", true);
         jsonPayload.addProperty("keep_alive", "60m");
-
 
         if (!providerConfig.completion_system_prompt.isEmpty()) {
             jsonPayload.addProperty("system", promptReplace(caretContext, providerConfig.completion_system_prompt));
@@ -125,16 +123,16 @@ public class OllamaProvider extends AIProvider {
 
         String jsonString = gson.toJson(jsonPayload);
 
-        if (DEBUG_AI) {
-            HopLa.montoyaApi.logging().logToOutput("Suggestion request: " + jsonString);
-        }
+        HopLa.montoyaApi.logging().logToOutput("Suggestion request: " + jsonString);
 
         RequestBody body = RequestBody.create(
                 jsonString,
                 JSON
         );
 
-
+        if (providerConfig.completion_endpoint == null || providerConfig.completion_endpoint.isEmpty()) {
+            throw new IOException("Completion endpoint undefined");
+        }
         Request.Builder builder = new Request.Builder().url(providerConfig.completion_endpoint);
 
         for (Map.Entry<String, Object> entry : providerConfig.headers.entrySet()) {
@@ -154,8 +152,7 @@ public class OllamaProvider extends AIProvider {
             }
 
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    Objects.requireNonNull(response.body()).byteStream(), StandardCharsets.UTF_8))
-            ) {
+                    Objects.requireNonNull(response.body()).byteStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     JsonObject lineJson = gson.fromJson(line, JsonObject.class);
@@ -191,7 +188,15 @@ public class OllamaProvider extends AIProvider {
             messages.add(userMessage);
         }
 
-        for (AIChats.Message message : chat.getMessages().subList(0, chat.getMessages().size() - 1)) {
+        if (chat.getNotes() != null && !chat.getNotes().isBlank()) {
+            JsonObject notesMessage = new JsonObject();
+            notesMessage.addProperty("role", AIChats.MessageRole.SYSTEM.toString());
+            notesMessage.addProperty("content", chat.getNotes());
+            messages.add(notesMessage);
+        }
+
+        int endIdx = Math.max(0, chat.getMessages().size() - 1);
+        for (AIChats.Message message : chat.getMessages().subList(0, endIdx)) {
             JsonObject userMessage = new JsonObject();
             userMessage.addProperty("role", message.getRole().toString().toLowerCase());
             userMessage.addProperty("content", message.getContent());
@@ -223,6 +228,10 @@ public class OllamaProvider extends AIProvider {
         String jsonString = gson.toJson(jsonPayload);
         RequestBody body = RequestBody.create(jsonString, JSON);
 
+        if (providerConfig.chat_endpoint == null || providerConfig.chat_endpoint.isEmpty()) {
+            callback.onError("Chat endpoint undefined");
+            return;
+        }
         Request.Builder builder = new Request.Builder().url(providerConfig.chat_endpoint);
 
         for (Map.Entry<String, Object> entry : providerConfig.headers.entrySet()) {
@@ -231,9 +240,7 @@ public class OllamaProvider extends AIProvider {
 
         Request request = builder.post(body).build();
 
-        if (DEBUG_AI) {
-            HopLa.montoyaApi.logging().logToOutput("AI chat request: " + jsonString);
-        }
+        HopLa.montoyaApi.logging().logToOutput("AI chat request: " + jsonString);
 
         currentChatcall = client.newCall(request);
 
@@ -249,26 +256,29 @@ public class OllamaProvider extends AIProvider {
                     return;
                 }
 
-                BufferedReader reader = new BufferedReader(new InputStreamReader(response.body().byteStream()));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (Thread.currentThread().isInterrupted()) break;
-
-                    JsonObject responseJson = gson.fromJson(line, JsonObject.class);
-
-                    if (isChat) {
-                        JsonObject messageObject = responseJson.getAsJsonObject("message");
-                        if (DEBUG_AI) {
-                            HopLa.montoyaApi.logging().logToOutput("AI streaming response: " + messageObject.get("content").getAsString());
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body().byteStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (Thread.currentThread().isInterrupted() || call.isCanceled()) {
+                            callback.onError("Cancelled");
+                            return;
                         }
-                        callback.onData(messageObject.get("content").getAsString());
-                    } else {
-                        if (DEBUG_AI) {
-                            HopLa.montoyaApi.logging().logToOutput("AI streaming response: " + responseJson.get("response").getAsString());
+
+                        JsonObject responseJson = gson.fromJson(line, JsonObject.class);
+
+                        if (isChat) {
+                            JsonObject messageObject = responseJson.getAsJsonObject("message");
+                            if (DEBUG_AI) {
+                                HopLa.montoyaApi.logging().logToOutput("AI streaming response: " + messageObject.get("content").getAsString());
+                            }
+                            callback.onData(messageObject.get("content").getAsString());
+                        } else {
+                            if (DEBUG_AI) {
+                                HopLa.montoyaApi.logging().logToOutput("AI streaming response: " + responseJson.get("response").getAsString());
+                            }
+                            callback.onData(responseJson.get("response").getAsString());
                         }
-                        callback.onData(responseJson.get("response").getAsString());
                     }
-
                 }
                 callback.onDone();
             } catch (IOException ex) {

@@ -62,6 +62,10 @@ public class BurpProvider extends AIProvider {
             messages.add(Message.systemMessage(providerConfig.chat_system_prompt));
         }
 
+        if (chat.getNotes() != null && !chat.getNotes().isBlank()) {
+            messages.add(Message.systemMessage(chat.getNotes()));
+        }
+
         if (!providerConfig.chat_params.isEmpty() && providerConfig.chat_params.containsKey("temperature")) {
             options = options.withTemperature((double) providerConfig.chat_params.get("temperature"));
         }

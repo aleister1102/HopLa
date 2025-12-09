@@ -1,28 +1,27 @@
 package com.hopla.ai;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
-import com.hopla.HopLa;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 import org.yaml.snakeyaml.inspector.TagInspector;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-
 import static com.hopla.Constants.PREFERENCE_AI_CHATS;
+import com.hopla.HopLa;
 import static com.hopla.Utils.alert;
 
-
 public class AIChats {
+
     private final Yaml yaml;
     public Chats chats = new Chats();
 
     public AIChats() {
         var loaderoptions = new LoaderOptions();
-        TagInspector taginspector =
-                tag -> tag.getClassName().equals(Chats.class.getName());
+        TagInspector taginspector
+                = tag -> tag.getClassName().equals(Chats.class.getName());
         loaderoptions.setTagInspector(taginspector);
         this.yaml = new Yaml(new Constructor(Chats.class, loaderoptions));
         load();
@@ -63,6 +62,7 @@ public class AIChats {
     }
 
     public static class Chats {
+
         public List<Chat> chats;
 
         public Chats() {
@@ -71,36 +71,62 @@ public class AIChats {
     }
 
     public static class Chat {
+
         public String timestamp;
+        public String title;
+        public String notes;
         public List<Message> messages;
 
         public Chat(String timestamp, List<Message> messages) {
             this.timestamp = timestamp;
             this.messages = messages;
+            this.title = timestamp;
+            this.notes = "";
         }
 
         public Chat() {
             this.messages = new ArrayList<>();
             this.timestamp = LocalDateTime.now().toString();
+            this.title = this.timestamp;
+            this.notes = "";
         }
 
         public void addMessage(Message message) {
             messages.add(message);
         }
 
-
         public List<Message> getMessages() {
             return messages;
         }
 
         public Message getLastMessage() {
-            if (messages.isEmpty()) return null;
+            if (messages.isEmpty()) {
+                return null;
+            }
             return messages.getLast();
         }
 
         public Message getLastUserMessage() {
-            if (messages.isEmpty() || messages.size() < 2) return null;
+            if (messages.isEmpty() || messages.size() < 2) {
+                return null;
+            }
             return messages.get(messages.size() - 2);
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String t) {
+            this.title = t;
+        }
+
+        public String getNotes() {
+            return notes;
+        }
+
+        public void setNotes(String n) {
+            this.notes = n;
         }
 
         @Override
@@ -114,6 +140,7 @@ public class AIChats {
     }
 
     public static class Message {
+
         public MessageRole role;
         public String content;
 

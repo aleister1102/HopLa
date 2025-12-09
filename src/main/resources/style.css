@@ -6,19 +6,36 @@ body * {
     margin: 0
 }
 
+.chat-container {
+    padding: 12px;
+    color: #e5e7eb;
+}
 
-.user, .assistant {
-    margin-bottom: 10px;
+.user,
+.assistant {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #3b4455;
+    box-shadow: none;
 }
 
 .user .role {
-    color: #3b5998;
+    color: #93c5fd;
     font-weight: bold;
 }
 
 .assistant .role {
-    color: #8b9dc3;
+    color: #a78bfa;
     font-weight: bold;
+}
+
+.user {
+    background: #2b3545;
+}
+
+.assistant {
+    background: #1f2937;
 }
 
 * {
@@ -27,9 +44,68 @@ body * {
 }
 
 pre {
-    color: #DC2525;
+    color: #e5e7eb;
+    background: #111827;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    padding: 8px;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+code {
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 4px;
+    padding: 2px 4px;
+    color: #e5e7eb;
+}
+
+pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+blockquote {
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-left: 4px solid #475569;
+    background: #0f172a;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0;
+}
+
+th,
+td {
+    border: 1px solid #374151;
+    padding: 6px 8px;
+    text-align: left;
+    color: #e5e7eb;
+}
+
+th {
+    background: #1f2937;
+    color: #93c5fd;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+    margin: 8px 0 6px;
+    font-weight: 600;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid #e0e0e0;
+    margin: 12px 0;
 }
 
 p {
@@ -44,4 +120,46 @@ ul {
 a {
     color: #1a73e8;
     text-decoration: none;
+}
+
+.intro {
+    margin: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #374151;
+    background: #1f2937;
+    color: #e5e7eb;
+}
+
+/* Enhanced code block container and header */
+.code-block {
+    margin: 12px 0;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    background: #0b1220;
+}
+
+.code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-bottom: 1px solid #374151;
+    background: #0f172a;
+    color: #93c5fd;
+    font-size: 11px;
+}
+
+.lang-label {
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
+.code-scroll {
+    white-space: pre;
+    overflow-x: auto;
+    padding: 10px;
+    margin: 0;
+    background: #111827;
+    border-radius: 0 0 8px 8px;
 }

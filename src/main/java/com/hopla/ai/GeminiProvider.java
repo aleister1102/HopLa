@@ -1,27 +1,30 @@
 package com.hopla.ai;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.hopla.Completer;
+import static com.hopla.Constants.DEBUG_AI;
 import com.hopla.HopLa;
+
 import okhttp3.Call;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.*;
-
-import static com.hopla.Constants.DEBUG_AI;
 
 public class GeminiProvider extends AIProvider {
 
     public GeminiProvider(LLMConfig config, LLMConfig.Provider providerConfig) {
         super(AIProviderType.GEMINI, AIProviderType.GEMINI.toString(), config, providerConfig);
     }
-
 
     // No fim on gemini
     @Override
@@ -32,7 +35,6 @@ public class GeminiProvider extends AIProvider {
     @Override
     public void instruct(String prompt, StreamingCallback callback) throws IOException {
         GeminiRequest geminiRequest = new GeminiRequest(new ArrayList<>());
-
 
         if (!providerConfig.quick_action_system_prompt.isEmpty()) {
             geminiRequest.contents.add(
@@ -53,6 +55,9 @@ public class GeminiProvider extends AIProvider {
         String jsonString = gson.toJson(geminiRequest);
         RequestBody body = RequestBody.create(jsonString, JSON);
 
+        if (providerConfig.quick_action_endpoint == null || providerConfig.quick_action_endpoint.isEmpty() || providerConfig.quick_action_model == null) {
+            throw new IOException("Quick action endpoint/model undefined");
+        }
         Request.Builder builder = new Request.Builder().url(providerConfig.quick_action_endpoint.replace("@model", providerConfig.quick_action_model).replace("@key", providerConfig.api_key));
 
         for (Map.Entry<String, Object> entry : providerConfig.headers.entrySet()) {
@@ -71,7 +76,6 @@ public class GeminiProvider extends AIProvider {
 
         GeminiRequest geminiRequest = new GeminiRequest(new ArrayList<>());
 
-
         if (!providerConfig.chat_system_prompt.isEmpty()) {
             geminiRequest.contents.add(
                     new GeminiRequest.Content(
@@ -81,7 +85,17 @@ public class GeminiProvider extends AIProvider {
             );
         }
 
-        for (AIChats.Message message : chat.getMessages().subList(0, chat.getMessages().size() - 1)) {
+        if (chat.getNotes() != null && !chat.getNotes().isBlank()) {
+            geminiRequest.contents.add(
+                    new GeminiRequest.Content(
+                            AIChats.MessageRole.SYSTEM.toString(),
+                            Collections.singletonList(new GeminiRequest.Part(chat.getNotes()))
+                    )
+            );
+        }
+
+        int endIdx = Math.max(0, chat.getMessages().size() - 1);
+        for (AIChats.Message message : chat.getMessages().subList(0, endIdx)) {
             geminiRequest.contents.add(
                     new GeminiRequest.Content(
                             AIChats.MessageRole.USER.toString(),
@@ -93,6 +107,9 @@ public class GeminiProvider extends AIProvider {
         String jsonString = gson.toJson(geminiRequest);
         RequestBody body = RequestBody.create(jsonString, JSON);
 
+        if (providerConfig.chat_endpoint == null || providerConfig.chat_endpoint.isEmpty() || providerConfig.chat_model == null) {
+            throw new IOException("Chat endpoint/model undefined");
+        }
         Request.Builder builder = new Request.Builder().url(providerConfig.chat_endpoint.replace("@model", providerConfig.chat_model).replace("@key", providerConfig.api_key));
 
         for (Map.Entry<String, Object> entry : providerConfig.headers.entrySet()) {
@@ -118,16 +135,21 @@ public class GeminiProvider extends AIProvider {
                     return;
                 }
 
-
                 BufferedReader reader = new BufferedReader(new InputStreamReader(response.body().byteStream()));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (Thread.currentThread().isInterrupted()) break;
+                    if (Thread.currentThread().isInterrupted()) {
+                        break;
+                    }
 
-                    if (!line.startsWith("data: ")) continue;
+                    if (!line.startsWith("data: ")) {
+                        continue;
+                    }
 
                     String jsonLine = line.substring("data: ".length());
-                    if (jsonLine.isBlank()) continue;
+                    if (jsonLine.isBlank()) {
+                        continue;
+                    }
 
                     JsonObject responseJson = gson.fromJson(jsonLine, JsonObject.class);
                     JsonArray candidates = responseJson.getAsJsonArray("candidates");
@@ -153,6 +175,7 @@ public class GeminiProvider extends AIProvider {
     }
 
     static class GeminiRequest {
+
         List<GeminiRequest.Content> contents;
 
         GeminiRequest(List<GeminiRequest.Content> contents) {
@@ -160,6 +183,7 @@ public class GeminiProvider extends AIProvider {
         }
 
         static class Content {
+
             String role;
             List<GeminiRequest.Part> parts;
 
@@ -169,8 +193,8 @@ public class GeminiProvider extends AIProvider {
             }
         }
 
-
         static class Part {
+
             String text;
 
             Part(String text) {

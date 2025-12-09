@@ -1,42 +1,102 @@
 package com.hopla;
 
-import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
-import com.hopla.ai.*;
-import org.commonmark.node.Node;
-import org.commonmark.parser.Parser;
-import org.commonmark.renderer.html.HtmlRenderer;
-
-import javax.swing.*;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.DefaultEditorKit;
-import javax.swing.text.Document;
-import javax.swing.text.html.HTMLEditorKit;
-import javax.swing.text.html.StyleSheet;
-import java.awt.*;
-import java.awt.event.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JEditorPane;
+import javax.swing.JComponent;
+import javax.swing.KeyStroke;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextPane;
+import javax.swing.ListSelectionModel;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.JDialog;
+import javax.swing.border.AbstractBorder;
+import javax.swing.border.EmptyBorder;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultEditorKit;
+import javax.swing.text.Document;
+import javax.swing.text.html.HTMLEditorKit;
+import javax.swing.text.html.StyleSheet;
+
+import org.commonmark.node.Node;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
+import org.commonmark.Extension;
+import org.commonmark.ext.gfm.tables.TablesExtension;
+import org.commonmark.ext.autolink.AutolinkExtension;
+import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension;
+
 import static com.hopla.Constants.DEBUG_AI;
-import static com.hopla.Utils.*;
+import static com.hopla.Constants.EXTERNAL_AI;
+import static com.hopla.Utils.alert;
+import static com.hopla.Utils.generateJFrame;
+import static com.hopla.Utils.getRequest;
+import static com.hopla.Utils.getResponse;
+import com.hopla.ai.AIChats;
+import com.hopla.ai.AIConfiguration;
+import com.hopla.ai.AIProvider;
+import com.hopla.ai.AIProviderType;
+import com.hopla.ai.LLMConfig;
+
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 
 public class AIChatPanel {
+
     private final static String REQUEST_PLACEHOLDER = "@request@";
     private final static String RESPONSE_PLACEHOLDER = "@response@";
     private final static String BUTTON_TEXT_SEND = "Ask";
     private final static String BUTTON_CANCEL_SEND = "Cancel";
+    private final static String NOTES_PLACEHOLDER = "@notes@";
 
     private final JLabel statusLabel = new JLabel(" ");
     private final AIConfiguration aiConfiguration;
     private final AIChats chats;
     private final HTMLEditorKit kit = new HTMLEditorKit();
     private final StyleSheet styleSheet = new StyleSheet();
-    private final Parser parser = Parser.builder().build();
-    private final HtmlRenderer renderer = HtmlRenderer.builder().escapeHtml(true).sanitizeUrls(true).build();
+    private Parser parser;
+    private HtmlRenderer renderer;
     private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm");
     private JTextArea inputField;
     private JFrame frame;
@@ -46,6 +106,7 @@ public class AIChatPanel {
     private AIProviderType currentProvider;
     private AIProvider aiProvider;
     private JScrollPane scrollPane;
+    private long lastUiUpdate = 0;
 
     public AIChatPanel(AIConfiguration aiConfiguration, AIChats chats) {
         this.aiConfiguration = aiConfiguration;
@@ -55,6 +116,13 @@ public class AIChatPanel {
         }
 
         loadCss();
+        java.util.List<Extension> exts = java.util.Arrays.asList(
+                TablesExtension.create(),
+                AutolinkExtension.create(),
+                StrikethroughExtension.create()
+        );
+        parser = Parser.builder().extensions(exts).build();
+        renderer = HtmlRenderer.builder().escapeHtml(true).sanitizeUrls(true).extensions(exts).build();
     }
 
     public void show(MessageEditorHttpRequestResponse messageEditor, InputEvent event, String input) {
@@ -72,10 +140,24 @@ public class AIChatPanel {
 
         this.source = (JTextArea) event.getSource();
         frame = generateJFrame();
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        frame.setAlwaysOnTop(false);
+
+        // ESC closes the panel and cancels any running AI requests
+        frame.getRootPane().registerKeyboardAction(e -> {
+            if (aiProvider != null) {
+                aiProvider.cancelCurrentChatRequest();
+            }
+            aiConfiguration.defaultChatProvider.cancelCurrentQuickActionRequest();
+            frame.dispose();
+        }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         frame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                if (aiProvider != null) {
+                    aiProvider.cancelCurrentChatRequest();
+                }
                 aiConfiguration.defaultChatProvider.cancelCurrentQuickActionRequest();
             }
         });
@@ -106,11 +188,15 @@ public class AIChatPanel {
 
         editorPane.addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) show(e);
+                if (e.isPopupTrigger()) {
+                    show(e);
+                }
             }
 
             public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) show(e);
+                if (e.isPopupTrigger()) {
+                    show(e);
+                }
             }
 
             private void show(MouseEvent e) {
@@ -137,17 +223,23 @@ public class AIChatPanel {
 
         panel.add(scrollPane, BorderLayout.CENTER);
 
-
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputPanel.add(statusLabel, BorderLayout.NORTH);
 
         inputField = new JTextArea(5, 20);
         inputField.setLineWrap(true);
         inputField.setWrapStyleWord(true);
+        inputField.setBorder(new EmptyBorder(5, 5, 5, 5));
 
         JScrollPane inputScrollPane = new JScrollPane(inputField);
+        inputScrollPane.setBorder(new RoundedBorder(10, Color.LIGHT_GRAY));
 
         JButton sendButton = new JButton(BUTTON_TEXT_SEND);
+        sendButton.setBackground(new Color(59, 89, 152));
+        sendButton.setForeground(Color.WHITE);
+        sendButton.setFocusPainted(false);
+        sendButton.setBorder(new RoundedBorder(10, new Color(59, 89, 152)));
+        sendButton.setOpaque(true);
 
         inputPanel.add(inputScrollPane, BorderLayout.CENTER);
         inputPanel.add(sendButton, BorderLayout.EAST);
@@ -175,7 +267,6 @@ public class AIChatPanel {
             }
         });
 
-
         panel.add(inputPanel, BorderLayout.SOUTH);
 
         JPanel historyPanel = new JPanel();
@@ -200,14 +291,12 @@ public class AIChatPanel {
 
         DefaultListModel<String> listModel = new DefaultListModel<>();
 
-
         chatsList = new JList<>(listModel);
         chatsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         chatsList.setLayoutOrientation(JList.VERTICAL);
         chatsList.setFixedCellWidth(200);
         historyPanel.add(chatsList);
         loadChatList();
-
 
         final int[] clickedItem = new int[1];
         JPopupMenu chatContextMenu = new JPopupMenu();
@@ -242,12 +331,16 @@ public class AIChatPanel {
 
             @Override
             public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) show(e);
+                if (e.isPopupTrigger()) {
+                    show(e);
+                }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) show(e);
+                if (e.isPopupTrigger()) {
+                    show(e);
+                }
             }
 
             private void show(MouseEvent e) {
@@ -256,12 +349,10 @@ public class AIChatPanel {
             }
         });
 
-
         JScrollPane historyScroll = new JScrollPane(historyPanel);
         historyScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
-
-        panel.setPreferredSize(new Dimension(800, 500));
+        panel.setPreferredSize(new Dimension(1100, 700));
         frame.add(historyPanel, BorderLayout.WEST);
         frame.add(panel, BorderLayout.CENTER);
         inputField.setText(input);
@@ -282,6 +373,9 @@ public class AIChatPanel {
 
                     userInput = userInput.replace(REQUEST_PLACEHOLDER, getRequest(messageEditor));
                     userInput = userInput.replace(RESPONSE_PLACEHOLDER, getResponse(messageEditor));
+                    AIChats.Chat current = getCurrentChat();
+                    String notes = current.getNotes() == null ? "" : current.getNotes();
+                    userInput = userInput.replace(NOTES_PLACEHOLDER, notes);
 
                     inputField.setText("");
                     statusLabel.setText("Thinking...");
@@ -309,10 +403,20 @@ public class AIChatPanel {
                             public void onData(String chunk) {
                                 if (!chunk.isEmpty()) {
                                     chat.getLastMessage().appendContent(chunk);
-                                    chats.save();
-                                    SwingUtilities.invokeLater(() -> {
-                                        loadChat(chat);
-                                    });
+                                    long currentTime = System.currentTimeMillis();
+                                    if (currentTime - lastUiUpdate > 100) {
+                                        lastUiUpdate = currentTime;
+                                        CompletableFuture.supplyAsync(() -> buildChatHtml(chat))
+                                                .thenAccept(html -> SwingUtilities.invokeLater(() -> {
+                                            JScrollBar verticalBar = scrollPane.getVerticalScrollBar();
+                                            boolean atBottom = verticalBar.getValue() + verticalBar.getVisibleAmount() >= verticalBar.getMaximum() + 70;
+
+                                            editorPane.setText(html);
+                                            if (!atBottom) {
+                                                editorPane.setCaretPosition(editorPane.getDocument().getLength());
+                                            }
+                                        }));
+                                    }
 
                                 }
                             }
@@ -320,15 +424,20 @@ public class AIChatPanel {
                             @Override
                             public void onDone() {
                                 chats.save();
-                                loadChat(chat);
-                                statusLabel.setText("");
-                                sendButton.setText(BUTTON_TEXT_SEND);
+                                SwingUtilities.invokeLater(() -> {
+                                    loadChat(chat);
+                                    statusLabel.setText("");
+                                    sendButton.setText(BUTTON_TEXT_SEND);
+                                    generateTitleAsync(chat);
+                                });
                             }
 
                             @Override
                             public void onError(String error) {
-                                statusLabel.setText(error);
-                                sendButton.setText(BUTTON_TEXT_SEND);
+                                SwingUtilities.invokeLater(() -> {
+                                    statusLabel.setText(error);
+                                    sendButton.setText(BUTTON_TEXT_SEND);
+                                });
                             }
                         });
                     } catch (Exception exc) {
@@ -336,19 +445,16 @@ public class AIChatPanel {
                         HopLa.montoyaApi.logging().logToError("AI chat error: " + exc.getMessage());
                     }
 
-
                 }
             }
         };
 
         sendButton.addActionListener(sendAction);
 
-
         JPanel bottomBar = new JPanel(new BorderLayout());
         bottomBar.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-
 
         JButton buttonRequest = new JButton(REQUEST_PLACEHOLDER);
         buttonRequest.addActionListener(new ActionListener() {
@@ -369,6 +475,15 @@ public class AIChatPanel {
         });
         buttonPanel.add(buttonResponse);
 
+        JButton buttonNotesToken = new JButton(NOTES_PLACEHOLDER);
+        buttonNotesToken.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                insertTextTextArea(NOTES_PLACEHOLDER);
+            }
+        });
+        buttonPanel.add(buttonNotesToken);
+
         JComboBox<LLMConfig.Prompt> selectBox = new JComboBox<>(aiConfiguration.config.prompts.toArray(new LLMConfig.Prompt[0]));
         selectBox.addActionListener(e -> {
             int idx = selectBox.getSelectedIndex();
@@ -379,6 +494,28 @@ public class AIChatPanel {
         });
 
         buttonPanel.add(selectBox);
+
+        JButton notesButton = new JButton("Notes");
+        notesButton.addActionListener(e -> {
+            AIChats.Chat chat = getCurrentChat();
+            JTextArea notesArea = new JTextArea(chat.getNotes() == null ? "" : chat.getNotes(), 12, 40);
+            notesArea.setLineWrap(true);
+            notesArea.setWrapStyleWord(true);
+            JPanel content = new JPanel(new BorderLayout());
+            content.add(new JScrollPane(notesArea), BorderLayout.CENTER);
+            JButton saveButton = new JButton("Save");
+            saveButton.addActionListener(ev -> {
+                chat.setNotes(notesArea.getText());
+                chats.save();
+                JDialog dlg = (JDialog) SwingUtilities.getWindowAncestor(saveButton);
+                if (dlg != null) {
+                    CenteredModal.closeWithAnimation(dlg);
+                }
+            });
+            content.add(saveButton, BorderLayout.SOUTH);
+            CenteredModal.showDialog(content, "Chat Notes");
+        });
+        buttonPanel.add(notesButton);
 
         if (Constants.EXTERNAL_AI) {
             Map<AIProviderType, LLMConfig.Provider> enabledProviders = aiConfiguration.config.providers.entrySet().stream()
@@ -401,8 +538,22 @@ public class AIChatPanel {
             buttonPanel.add(aiProviderSelectBox);
         }
 
-
         bottomBar.add(buttonPanel, BorderLayout.WEST);
+
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton hideButton = new JButton("Hide");
+        hideButton.addActionListener(e -> frame.setVisible(false));
+        JButton closeButton = new JButton("Close");
+        closeButton.addActionListener(e -> {
+            if (aiProvider != null) {
+                aiProvider.cancelCurrentChatRequest();
+            }
+            aiConfiguration.defaultChatProvider.cancelCurrentQuickActionRequest();
+            frame.dispose();
+        });
+        rightPanel.add(hideButton);
+        rightPanel.add(closeButton);
+        bottomBar.add(rightPanel, BorderLayout.EAST);
         inputPanel.add(bottomBar, BorderLayout.SOUTH);
 
         frame.pack();
@@ -421,9 +572,9 @@ public class AIChatPanel {
         }
         DefaultListModel<String> listModel = new DefaultListModel<>();
         for (AIChats.Chat item : chats.getChats().reversed()) {
-            listModel.addElement(item.timestamp);
+            String name = (item.getTitle() != null && !item.getTitle().isBlank()) ? item.getTitle() : item.timestamp;
+            listModel.addElement(name);
         }
-
 
         chatsList.setModel(listModel);
 
@@ -434,14 +585,8 @@ public class AIChatPanel {
     }
 
     private void loadChat(AIChats.Chat chat) {
-        String m = "";
-        for (AIChats.Message message : chat.getMessages()) {
-            String html = renderMarkdownToHtml(message.getContent());
-            m += "<div class=\"" + message.getRole().toString().toLowerCase() + "\">" +
-                    "<span class=\"role\">" + message.getRole().toString() + "</span>" +
-                    html +
-                    "</div>";
-        }
+        String m = buildChatHtml(chat);
+
         if (DEBUG_AI) {
             HopLa.montoyaApi.logging().logToOutput("AI chat html: " + m);
 
@@ -457,6 +602,87 @@ public class AIChatPanel {
 
     }
 
+    private String buildChatHtml(AIChats.Chat chat) {
+        StringBuilder m = new StringBuilder();
+        m.append("<div class=\"chat-container\">");
+        if (chat.getMessages().isEmpty()) {
+            m.append("<div class=\"intro\">Hello! 👋 How’s your day going? Let me know if there’s anything I can help you with.</div>");
+        }
+        for (AIChats.Message message : chat.getMessages()) {
+            String html = renderMarkdownToHtml(message.getContent());
+            m.append("<div class=\"").append(message.getRole().toString().toLowerCase()).append("\">")
+                    .append("<span class=\"role\">").append(message.getRole().toString()).append("</span>")
+                    .append(html)
+                    .append("</div>");
+        }
+        m.append("</div>");
+        return m.toString();
+    }
+
+    private void generateTitleAsync(AIChats.Chat chat) {
+        String currentTitle = chat.getTitle();
+        if (currentTitle != null && !currentTitle.isBlank() && !currentTitle.equals(chat.timestamp)) {
+            return;
+        }
+        AIChats.Message lastUser = chat.getLastUserMessage();
+        if (lastUser == null) {
+            return;
+        }
+        String base = lastUser.getContent();
+        if (base == null || base.isBlank()) {
+            return;
+        }
+
+        String fallback = sanitizeTitle(base);
+        if (!EXTERNAL_AI) {
+            chat.setTitle(fallback);
+            chats.save();
+            loadChatList();
+            return;
+        }
+        try {
+            AIProvider p = aiConfiguration.defaultChatProvider;
+            String prompt = "Generate a concise, meaningful chat title (3-6 words) based on this text. Return only the title without punctuation: \n" + base;
+            StringBuilder sb = new StringBuilder();
+            p.instruct(prompt, new AIProvider.StreamingCallback() {
+                @Override
+                public void onData(String chunk) {
+                    sb.append(chunk);
+                }
+
+                @Override
+                public void onDone() {
+                    String title = sanitizeTitle(sb.toString());
+                    chat.setTitle(title.isBlank() ? fallback : title);
+                    chats.save();
+                    SwingUtilities.invokeLater(() -> loadChatList());
+                }
+
+                @Override
+                public void onError(String error) {
+                    chat.setTitle(fallback);
+                    chats.save();
+                    SwingUtilities.invokeLater(() -> loadChatList());
+                }
+            });
+        } catch (Exception e) {
+            chat.setTitle(fallback);
+            chats.save();
+            loadChatList();
+        }
+    }
+
+    private String sanitizeTitle(String s) {
+        if (s == null) {
+            return "";
+        }
+        String t = s.replace("\n", " ").replaceAll("[\"'`]+", "").trim();
+        if (t.length() > 60) {
+            t = t.substring(0, 60).trim();
+        }
+        return t;
+    }
+
     private void loadCss() {
         URL cssUrl = getClass().getResource("/style.css");
         styleSheet.importStyleSheet(cssUrl);
@@ -469,7 +695,38 @@ public class AIChatPanel {
         if (DEBUG_AI) {
             HopLa.montoyaApi.logging().logToError("AI chat html: " + body);
         }
-        return body;
+        return enhanceCodeBlocks(body);
+    }
+
+    private String enhanceCodeBlocks(String html) {
+        String patternWithLang = "<pre><code\\s+class=\\\"language-([a-zA-Z0-9_\\-]+)\\\">([\\s\\S]*?)</code></pre>";
+        String patternNoLang = "<pre><code>([\\s\\S]*?)</code></pre>";
+
+        java.util.regex.Pattern pWith = java.util.regex.Pattern.compile(patternWithLang, java.util.regex.Pattern.DOTALL);
+        java.util.regex.Matcher mWith = pWith.matcher(html);
+        StringBuffer sb = new StringBuffer();
+        while (mWith.find()) {
+            String lang = mWith.group(1);
+            String content = mWith.group(2);
+            String replacement = "<div class=\"code-block\"><div class=\"code-header\"><span class=\"lang-label\">" + lang
+                    + "</span></div><pre class=\"code-scroll\"><code class=\"language-" + lang + "\">" + content
+                    + "</code></pre></div>";
+            mWith.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
+        }
+        mWith.appendTail(sb);
+        html = sb.toString();
+
+        java.util.regex.Pattern pNo = java.util.regex.Pattern.compile(patternNoLang, java.util.regex.Pattern.DOTALL);
+        java.util.regex.Matcher mNo = pNo.matcher(html);
+        sb = new StringBuffer();
+        while (mNo.find()) {
+            String content = mNo.group(1);
+            String replacement = "<div class=\"code-block\"><div class=\"code-header\"><span class=\"lang-label\">code</span></div>"
+                    + "<pre class=\"code-scroll\"><code>" + content + "</code></pre></div>";
+            mNo.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
+        }
+        mNo.appendTail(sb);
+        return sb.toString();
     }
 
     private void insertTextTextArea(String text) {
@@ -493,6 +750,37 @@ public class AIChatPanel {
     public void dispose() {
         if (frame != null) {
             frame.dispose();
+        }
+    }
+
+    private static class RoundedBorder extends AbstractBorder {
+
+        private final int radius;
+        private final Color color;
+
+        RoundedBorder(int radius, Color color) {
+            this.radius = radius;
+            this.color = color;
+        }
+
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+            Graphics2D g2 = (Graphics2D) g;
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            g2.drawRoundRect(x, y, width - 1, height - 1, radius, radius);
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c) {
+            return new Insets(this.radius + 1, this.radius + 1, this.radius + 2, this.radius);
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c, Insets insets) {
+            insets.left = insets.top = this.radius + 1;
+            insets.right = insets.bottom = this.radius + 2;
+            return insets;
         }
     }
 

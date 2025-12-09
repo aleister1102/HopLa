@@ -142,7 +142,8 @@ public final class Utils {
         frame.getRootPane().putClientProperty("windowTitle", "");
         frame.setName("");
         frame.setLocationRelativeTo(null);
-        frame.setAutoRequestFocus(false);
+        frame.setAutoRequestFocus(true);
+        frame.setFocusableWindowState(true);
         frame.setAlwaysOnTop(true);
         return frame;
     }
@@ -153,4 +154,3 @@ public final class Utils {
         return element.getAsJsonObject();
     }
 }
-

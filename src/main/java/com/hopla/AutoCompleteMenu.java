@@ -55,6 +55,10 @@ public class AutoCompleteMenu {
         suggestionList.setLayoutOrientation(JList.VERTICAL);
         suggestionList.setFocusable(false);
         suggestionList.setVisibleRowCount(MIN_VISIBLE_ROWS);
+        suggestionList.setBackground(new Color(31, 41, 55));
+        suggestionList.setForeground(new Color(229, 231, 235));
+        suggestionList.setSelectionBackground(new Color(59, 68, 85));
+        suggestionList.setSelectionForeground(new Color(229, 231, 235));
         suggestionList.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 // Double click
@@ -65,6 +69,8 @@ public class AutoCompleteMenu {
         });
         JScrollPane scrollPane = new JScrollPane(suggestionList, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setPreferredSize(new Dimension(FRAME_WIDTH, FRAME_HEIGHT));
+        scrollPane.getViewport().setBackground(new Color(31, 41, 55));
+        frame.getContentPane().setBackground(new Color(31, 41, 55));
         hBar = scrollPane.getHorizontalScrollBar();
         frame.getContentPane().add(scrollPane, BorderLayout.CENTER);
     }

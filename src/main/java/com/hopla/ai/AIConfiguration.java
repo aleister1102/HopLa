@@ -1,28 +1,36 @@
 package com.hopla.ai;
 
-import burp.api.montoya.MontoyaApi;
-import burp.api.montoya.persistence.Preferences;
-import com.hopla.Constants;
-import com.hopla.PayloadDefinition;
-import com.hopla.Utils;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
-import org.yaml.snakeyaml.inspector.TagInspector;
-
-import javax.swing.*;
-import javax.swing.filechooser.FileNameExtensionFilter;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.stream.Collectors;
 
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
+import javax.swing.filechooser.FileNameExtensionFilter;
+
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
+import org.yaml.snakeyaml.inspector.TagInspector;
+
+import com.hopla.Constants;
 import static com.hopla.Constants.DEFAULT_AI_CONFIGURATION_PATH;
 import static com.hopla.Constants.DEFAULT_BAPP_AI_CONFIGURATION_PATH;
+import com.hopla.PayloadDefinition;
+import com.hopla.Utils;
 import static com.hopla.Utils.isYamlFile;
 
+import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.persistence.Preferences;
+
 public class AIConfiguration {
+
     private final MontoyaApi api;
     private final Preferences preferences;
     private final Yaml yaml;
@@ -36,8 +44,8 @@ public class AIConfiguration {
         this.api = api;
         this.preferences = api.persistence().preferences();
         var loaderoptions = new LoaderOptions();
-        TagInspector taginspector =
-                tag -> tag.getClassName().equals(PayloadDefinition.class.getName());
+        TagInspector taginspector
+                = tag -> tag.getClassName().equals(PayloadDefinition.class.getName());
         loaderoptions.setTagInspector(taginspector);
 
         yaml = new Yaml(new Constructor(LLMConfig.class, loaderoptions));
@@ -54,9 +62,9 @@ public class AIConfiguration {
 
     public String getCurrentPath() {
         String path = preferences.getString(Constants.PREFERENCE_AI_CONFIGURATION);
-        if (Constants.EXTERNAL_AI){
+        if (Constants.EXTERNAL_AI) {
             return (path != null && !path.isEmpty()) ? (path) : "Not configured";
-        }else {
+        } else {
             return (path != null && !path.isEmpty()) ? (path.equals(DEFAULT_BAPP_AI_CONFIGURATION_PATH) ? "Burp default" : path) : "Not configured";
         }
     }
@@ -64,23 +72,20 @@ public class AIConfiguration {
     public boolean load() {
         String savedPath = preferences.getString(Constants.PREFERENCE_AI_CONFIGURATION);
 
-        if ((savedPath == null || savedPath.isEmpty()) && !Constants.EXTERNAL_AI) {
-            savedPath = DEFAULT_BAPP_AI_CONFIGURATION_PATH;
+        if ((savedPath == null || savedPath.isEmpty())) {
+            savedPath = Constants.EXTERNAL_AI ? DEFAULT_AI_CONFIGURATION_PATH : DEFAULT_BAPP_AI_CONFIGURATION_PATH;
         }
 
-        if (savedPath != null && !savedPath.isEmpty() && !DEFAULT_AI_CONFIGURATION_PATH.equals(savedPath)) {
-            try {
-                config = loadFromFile(savedPath);
-                api.logging().logToOutput("Loaded AI configuration from saved path: " + savedPath);
-                isAIConfigured = true;
-                return true;
-            } catch (Exception e) {
-                api.logging().logToError("Failed to load AI configuration from saved path: " + savedPath + ", loading default");
-                Utils.alert(Constants.ERROR_INVALID_FILE + e.getMessage());
-                return false;
-            }
+        try {
+            config = loadFromFile(savedPath);
+            api.logging().logToOutput("Loaded AI configuration: " + savedPath);
+            isAIConfigured = true;
+            return true;
+        } catch (Exception e) {
+            api.logging().logToError("Failed to load AI configuration: " + savedPath + " => " + e.getMessage());
+            Utils.alert(Constants.ERROR_INVALID_FILE + e.getMessage());
+            return false;
         }
-        return false;
     }
 
     public void export() {
@@ -120,7 +125,6 @@ public class AIConfiguration {
                 fileToSave = new File(fileToSave.getAbsolutePath() + ".yml");
             }
 
-
             try {
                 Files.writeString(fileToSave.toPath(), sample);
                 JOptionPane.showMessageDialog(null, "File saved: " + fileToSave.getAbsolutePath());
@@ -132,7 +136,8 @@ public class AIConfiguration {
 
     private LLMConfig loadFromFile(String path) throws Exception {
 
-        try (InputStream in = path.equals(DEFAULT_BAPP_AI_CONFIGURATION_PATH) ? getClass().getResourceAsStream(path) : Files.newInputStream(Paths.get(path))) {
+        boolean isResource = path.equals(DEFAULT_BAPP_AI_CONFIGURATION_PATH) || path.equals(DEFAULT_AI_CONFIGURATION_PATH);
+        try (InputStream in = isResource ? getClass().getResourceAsStream(path) : Files.newInputStream(Paths.get(path))) {
             LLMConfig config = yaml.load(in);
 
             if (Constants.EXTERNAL_AI) {
