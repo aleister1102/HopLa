@@ -1,7 +1,7 @@
 package com.hopla;
 
 public final class Constants {
-    public static final String VERSION = "2.2.0";
+    public static final String VERSION = "2.3.0";
     public static final String EXTENSION_NAME = "HopLa";
     public static final String INIT_MESSAGE = "HopLa initialized v" + VERSION + "\n\nFor i3, add the following line to $HOME/.config/i3/config for floating frame:\n" +
             "    for_window [class=\".*burp-StartBurp.*\" title=\"^ $\"] floating enable\n\nHappy hacking !\n@alexisdanizan\n--------------";
