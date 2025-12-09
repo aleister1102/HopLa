@@ -58,10 +58,10 @@ public class PayloadMenu {
         dialog.setLayout(new BorderLayout());
 
         // Styling
-        Color bg = new Color(31, 41, 55);
-        Color fg = new Color(229, 231, 235);
-        Color selBg = new Color(59, 68, 85);
-        Color selFg = fg;
+        Color bg = ThemeUtils.getBackgroundColor(HopLa.montoyaApi);
+        Color fg = ThemeUtils.getForegroundColor(HopLa.montoyaApi);
+        Color selBg = ThemeUtils.getSelectionBackgroundColor(HopLa.montoyaApi);
+        Color selFg = ThemeUtils.getSelectionForegroundColor(HopLa.montoyaApi);
 
         dialog.getContentPane().setBackground(bg);
         dialog.getRootPane().setBorder(BorderFactory.createLineBorder(selBg, 1));

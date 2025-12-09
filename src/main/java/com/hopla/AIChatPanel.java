@@ -112,10 +112,15 @@ public class AIChatPanel {
         this.aiConfiguration = aiConfiguration;
         this.chats = chats;
         if (aiConfiguration.isAIConfigured) {
-            this.currentProvider = aiConfiguration.defaultChatProvider.type;
+            AIProvider provider = aiConfiguration.getChatProvider();
+            if (provider != null) {
+                this.currentProvider = provider.type;
+            }
         }
 
-        loadCss();
+        String css = ThemeUtils.getCss(HopLa.montoyaApi);
+        styleSheet.addRule(css);
+        kit.setStyleSheet(styleSheet);
         java.util.List<Extension> exts = java.util.Arrays.asList(
                 TablesExtension.create(),
                 AutolinkExtension.create(),
@@ -135,7 +140,10 @@ public class AIChatPanel {
         }
 
         if (currentProvider == null) {
-            this.currentProvider = aiConfiguration.defaultChatProvider.type;
+            AIProvider p = aiConfiguration.getChatProvider();
+            if (p != null) {
+                this.currentProvider = p.type;
+            }
         }
 
         this.source = (JTextArea) event.getSource();
@@ -148,7 +156,6 @@ public class AIChatPanel {
             if (aiProvider != null) {
                 aiProvider.cancelCurrentChatRequest();
             }
-            aiConfiguration.defaultChatProvider.cancelCurrentQuickActionRequest();
             frame.dispose();
         }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
@@ -158,7 +165,6 @@ public class AIChatPanel {
                 if (aiProvider != null) {
                     aiProvider.cancelCurrentChatRequest();
                 }
-                aiConfiguration.defaultChatProvider.cancelCurrentQuickActionRequest();
             }
         });
 
@@ -232,13 +238,13 @@ public class AIChatPanel {
         inputField.setBorder(new EmptyBorder(5, 5, 5, 5));
 
         JScrollPane inputScrollPane = new JScrollPane(inputField);
-        inputScrollPane.setBorder(new RoundedBorder(10, Color.LIGHT_GRAY));
+        inputScrollPane.setBorder(new RoundedBorder(10, ThemeUtils.getBorderColor(HopLa.montoyaApi)));
 
         JButton sendButton = new JButton(BUTTON_TEXT_SEND);
-        sendButton.setBackground(new Color(59, 89, 152));
-        sendButton.setForeground(Color.WHITE);
+        sendButton.setBackground(ThemeUtils.getButtonBackgroundColor(HopLa.montoyaApi));
+        sendButton.setForeground(ThemeUtils.getButtonForegroundColor(HopLa.montoyaApi));
         sendButton.setFocusPainted(false);
-        sendButton.setBorder(new RoundedBorder(10, new Color(59, 89, 152)));
+        sendButton.setBorder(new RoundedBorder(10, ThemeUtils.getButtonBackgroundColor(HopLa.montoyaApi)));
         sendButton.setOpaque(true);
 
         inputPanel.add(inputScrollPane, BorderLayout.CENTER);
@@ -391,7 +397,7 @@ public class AIChatPanel {
                     sendButton.setText(BUTTON_CANCEL_SEND);
 
                     try {
-                        aiProvider = aiConfiguration.getChatProvider(currentProvider);
+                        aiProvider = aiConfiguration.getProvider(currentProvider);
                         AIChats.Message answer = new AIChats.Message(
                                 AIChats.MessageRole.ASSISTANT,
                                 ""
@@ -484,11 +490,11 @@ public class AIChatPanel {
         });
         buttonPanel.add(buttonNotesToken);
 
-        JComboBox<LLMConfig.Prompt> selectBox = new JComboBox<>(aiConfiguration.config.prompts.toArray(new LLMConfig.Prompt[0]));
+        JComboBox<LLMConfig.Prompt> selectBox = new JComboBox<>(aiConfiguration.getPrompts().toArray(new LLMConfig.Prompt[0]));
         selectBox.addActionListener(e -> {
             int idx = selectBox.getSelectedIndex();
             if (idx != -1) {
-                insertTextTextArea(aiConfiguration.config.prompts.get(idx).content);
+                insertTextTextArea(aiConfiguration.getPrompts().get(idx).content);
 
             }
         });
@@ -518,11 +524,9 @@ public class AIChatPanel {
         buttonPanel.add(notesButton);
 
         if (Constants.EXTERNAL_AI) {
-            Map<AIProviderType, LLMConfig.Provider> enabledProviders = aiConfiguration.config.providers.entrySet().stream()
-                    .filter(entry -> entry.getValue().enabled)
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            java.util.List<AIProviderType> enabledProviders = aiConfiguration.getEnabledProviders();
 
-            JComboBox<AIProviderType> aiProviderSelectBox = new JComboBox<>(enabledProviders.keySet().toArray(new AIProviderType[0]));
+            JComboBox<AIProviderType> aiProviderSelectBox = new JComboBox<>(enabledProviders.toArray(new AIProviderType[0]));
 
             aiProviderSelectBox.addActionListener(e -> {
                 AIProviderType selectedProvider = (AIProviderType) aiProviderSelectBox.getSelectedItem();
@@ -534,7 +538,10 @@ public class AIChatPanel {
                 }
             });
 
-            aiProviderSelectBox.setSelectedItem(aiConfiguration.defaultChatProvider.type);
+            AIProvider p = aiConfiguration.getChatProvider();
+            if (p != null) {
+                aiProviderSelectBox.setSelectedItem(p.type);
+            }
             buttonPanel.add(aiProviderSelectBox);
         }
 
@@ -548,7 +555,6 @@ public class AIChatPanel {
             if (aiProvider != null) {
                 aiProvider.cancelCurrentChatRequest();
             }
-            aiConfiguration.defaultChatProvider.cancelCurrentQuickActionRequest();
             frame.dispose();
         });
         rightPanel.add(hideButton);
@@ -641,7 +647,7 @@ public class AIChatPanel {
             return;
         }
         try {
-            AIProvider p = aiConfiguration.defaultChatProvider;
+            AIProvider p = aiConfiguration.getChatProvider();
             String prompt = "Generate a concise, meaningful chat title (3-6 words) based on this text. Return only the title without punctuation: \n" + base;
             StringBuilder sb = new StringBuilder();
             p.instruct(prompt, new AIProvider.StreamingCallback() {
@@ -681,12 +687,6 @@ public class AIChatPanel {
             t = t.substring(0, 60).trim();
         }
         return t;
-    }
-
-    private void loadCss() {
-        URL cssUrl = getClass().getResource("/style.css");
-        styleSheet.importStyleSheet(cssUrl);
-        kit.setStyleSheet(styleSheet);
     }
 
     private String renderMarkdownToHtml(String markdown) {

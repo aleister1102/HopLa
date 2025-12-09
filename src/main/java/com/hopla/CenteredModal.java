@@ -29,10 +29,8 @@ public final class CenteredModal {
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBorder(new EmptyBorder(16, 20, 16, 20));
 
-        Theme theme = HopLa.montoyaApi.userInterface().currentTheme();
-        boolean dark = theme == Theme.DARK;
-        Color bg = dark ? new Color(40, 40, 40) : Color.WHITE;
-        Color fg = dark ? new Color(245, 245, 245) : new Color(26, 26, 26);
+        Color bg = ThemeUtils.getBackgroundColor(HopLa.montoyaApi);
+        Color fg = ThemeUtils.getForegroundColor(HopLa.montoyaApi);
 
         wrapper.setBackground(bg);
         content.setBackground(bg);

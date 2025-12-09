@@ -64,6 +64,14 @@ public class LLMConfig {
         public String description;
         public String content;
 
+        public Prompt() {}
+
+        public Prompt(String name, String description, String content) {
+            this.name = name;
+            this.description = description;
+            this.content = content;
+        }
+
         @Override
         public String toString() {
             return name + ": " + description;
@@ -74,6 +82,20 @@ public class LLMConfig {
         public String name;
         public String description;
         public String content;
+
+        public QuickAction() {}
+
+        public QuickAction(String name, String content) {
+            this.name = name;
+            this.description = name; // default description to name if not provided
+            this.content = content;
+        }
+
+        public QuickAction(String name, String description, String content) {
+            this.name = name;
+            this.description = description;
+            this.content = content;
+        }
 
         @Override
         public String toString() {

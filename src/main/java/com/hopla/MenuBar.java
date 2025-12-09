@@ -1,25 +1,32 @@
 package com.hopla;
 
-import burp.api.montoya.MontoyaApi;
-import com.hopla.ai.AIConfiguration;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JSeparator;
 
-import javax.swing.*;
-
-import static com.hopla.Constants.*;
+import static com.hopla.Constants.DEFAULT_PAYLOAD_RESOURCE_PATH;
+import static com.hopla.Constants.PREFERENCE_AI;
+import static com.hopla.Constants.PREFERENCE_AI_CHATS;
+import static com.hopla.Constants.PREFERENCE_AI_CONFIGURATION;
+import static com.hopla.Constants.PREFERENCE_AUTOCOMPLETION;
+import static com.hopla.Constants.PREFERENCE_CUSTOM_PATH;
+import static com.hopla.Constants.PREFERENCE_LOCAL_DICT;
+import static com.hopla.Constants.PREFERENCE_SHORTCUTS;
 import static com.hopla.Utils.success;
+
+import burp.api.montoya.MontoyaApi;
 
 public class MenuBar {
 
     private final MontoyaApi api;
     private final PayloadManager payloadManager;
-    private final AIConfiguration aiConfiguration;
     private final HopLa hopla;
 
-    public MenuBar(MontoyaApi api, HopLa hopla, PayloadManager payloadManager, AIConfiguration aiConfiguration) {
+    public MenuBar(MontoyaApi api, HopLa hopla, PayloadManager payloadManager) {
         this.api = api;
         this.hopla = hopla;
         this.payloadManager = payloadManager;
-        this.aiConfiguration = aiConfiguration;
         buildAndRegisterMenu();
     }
 
@@ -48,76 +55,10 @@ public class MenuBar {
             reloadShortcuts();
         });
 
-        JMenuItem aiConfigurationPathItem = new JMenuItem("Loaded AI conf: " + aiConfiguration.getCurrentPath());
-        aiConfigurationPathItem.setEnabled(false);
-
-        JMenuItem completionProviderItem = new JMenuItem("AI completion provider: " + aiConfiguration.getCompletionProviderName());
-        completionProviderItem.setEnabled(false);
-
-        JMenuItem quickActionProviderItem = new JMenuItem("AI quick action provider: " + aiConfiguration.getQuickActionProviderName());
-        quickActionProviderItem.setEnabled(false);
-
-
-        JMenuItem aiConfigurationChooseItem = new JMenuItem(Constants.MENU_ITEM_CHOOSE_AI_CONFIGURATION);
-        aiConfigurationChooseItem.addActionListener(e -> {
-            aiConfiguration.chooseConfigurationFile();
-            aiConfigurationPathItem.setText("Loaded AI conf: " + aiConfiguration.getCurrentPath());
-            completionProviderItem.setText("AI completion provider: " + aiConfiguration.getCompletionProviderName());
-            quickActionProviderItem.setText("AI quick action provider: " + aiConfiguration.getQuickActionProviderName());
-            reloadShortcuts();
-        });
-
-        JMenuItem aiConfigurationReloadItem = new JMenuItem(Constants.MENU_ITEM_RELOAD_AI_CONFIGURATION);
-        aiConfigurationReloadItem.addActionListener(e -> {
-            if (aiConfiguration.load()) {
-                api.logging().logToOutput("AI configuration file reloaded: " + aiConfiguration.getCurrentPath());
-                success(aiConfiguration.getCurrentPath() + " reloaded");
-                api.logging().logToOutput("Reloading shortcuts");
-                reloadShortcuts();
-            }
-        });
-
-        JCheckBoxMenuItem enableAutoCompletionItem = new JCheckBoxMenuItem(Constants.MENU_ITEM_AUTOCOMPLETION, hopla.autocompletionEnabled);
-        enableAutoCompletionItem.addActionListener(e -> {
-            if (hopla.autocompletionEnabled) {
-                hopla.disableAutocompletion();
-            } else {
-                hopla.enableAutocompletion();
-            }
-            api.logging().logToOutput("Autocompletion: " + (hopla.autocompletionEnabled ? "enabled" : "disabled"));
-
-        });
-
-        JCheckBoxMenuItem enableShortcutsItem = new JCheckBoxMenuItem(Constants.MENU_ITEM_SHORTCUTS, hopla.shortcutsEnabled);
-        enableShortcutsItem.addActionListener(e -> {
-            if (hopla.shortcutsEnabled) {
-                hopla.disableShortcuts();
-            } else {
-                hopla.enableShortcuts();
-            }
-            api.logging().logToOutput("Shortcuts: " + (hopla.shortcutsEnabled ? "enabled" : "disabled"));
-        });
-
-        JCheckBoxMenuItem enableAIItem = new JCheckBoxMenuItem(Constants.MENU_ITEM_AI_AUTOCOMPLETION, hopla.aiAutocompletionEnabled);
-        enableAIItem.addActionListener(e -> {
-            hopla.aiAutocompletionEnabled = !hopla.aiAutocompletionEnabled;
-            api.persistence()
-                    .preferences()
-                    .setBoolean(PREFERENCE_AI, hopla.aiAutocompletionEnabled);
-            api.logging().logToOutput("AI autocompletion: " + (hopla.aiAutocompletionEnabled ? "enabled" : "disabled"));
-        });
-
-
-        JMenuItem exportDefaultAIConfItem = new JMenuItem(Constants.MENU_ITEM_EXPORT_DEFAULT_AI_CONF);
-        exportDefaultAIConfItem.addActionListener(e -> {
-            HopLa.aiConfiguration.export();
-        });
-
         JMenuItem exportDefaultPayloadsItem = new JMenuItem(Constants.MENU_ITEM_EXPORT_DEFAULT_PAYLOADS);
         exportDefaultPayloadsItem.addActionListener(e -> {
             payloadManager.export();
         });
-
 
         JMenuItem clearPreferencesItem = new JMenuItem(Constants.MENU_ITEM_CLEAR_PREFERENCES);
         clearPreferencesItem.addActionListener(e -> {
@@ -134,28 +75,11 @@ public class MenuBar {
             }
 
         });
-        if (Constants.EXTERNAL_AI) {
-            menu.add(enableAIItem);
-        }
 
-        menu.add(exportDefaultAIConfItem);
-        menu.add(aiConfigurationChooseItem);
-        menu.add(aiConfigurationReloadItem);
-        menu.add(aiConfigurationPathItem);
-
-        if (Constants.EXTERNAL_AI) {
-            menu.add(completionProviderItem);
-            menu.add(quickActionProviderItem);
-        }
-
-        menu.add(new JSeparator());
         menu.add(pathItem);
         menu.add(chooseItem);
         menu.add(reloadItem);
         menu.add(exportDefaultPayloadsItem);
-        menu.add(new JSeparator());
-        menu.add(enableAutoCompletionItem);
-        menu.add(enableShortcutsItem);
         menu.add(new JSeparator());
         menu.add(clearPreferencesItem);
         api.userInterface().menuBar().registerMenu(menu);

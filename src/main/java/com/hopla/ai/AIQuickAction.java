@@ -1,27 +1,57 @@
 package com.hopla.ai;
 
-import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
-import com.hopla.HopLa;
-import com.hopla.Utils;
-import org.commonmark.node.Node;
-import org.commonmark.parser.Parser;
-import org.commonmark.renderer.html.HtmlRenderer;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.net.URL;
 
-import javax.swing.*;
+import javax.swing.AbstractAction;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JEditorPane;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextPane;
+import javax.swing.JToggleButton;
+import javax.swing.SwingUtilities;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultEditorKit;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Document;
 import javax.swing.text.html.HTMLEditorKit;
 import javax.swing.text.html.StyleSheet;
-import java.awt.*;
-import java.awt.event.*;
-import java.net.URL;
+
+import org.commonmark.node.Node;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
 
 import static com.hopla.Constants.DEBUG_AI;
-import static com.hopla.Utils.*;
+import com.hopla.HopLa;
+import com.hopla.Utils;
+import static com.hopla.Utils.alert;
+import static com.hopla.Utils.generateJFrame;
+import static com.hopla.Utils.getRequest;
+
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 
 public class AIQuickAction {
+
     private final static String REQUEST_PLACEHOLDER = "@request@";
     private final static String BUTTON_TEXT_SEND = "Apply";
     private final static String BUTTON_CANCEL_SEND = "Cancel";
@@ -61,15 +91,14 @@ public class AIQuickAction {
         buttonPanel.add(insertButton);
         buttonPanel.add(cancelButton);
 
-
         cancelButton.addActionListener(e -> {
-            aiConfiguration.quickActionProvider.cancelCurrentQuickActionRequest();
+            aiConfiguration.getQuickActionProvider().cancelCurrentQuickActionRequest();
         });
 
         frame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                aiConfiguration.quickActionProvider.cancelCurrentQuickActionRequest();
+                aiConfiguration.getQuickActionProvider().cancelCurrentQuickActionRequest();
             }
         });
 
@@ -77,7 +106,6 @@ public class AIQuickAction {
         instruction.setLineWrap(true);
         instruction.setWrapStyleWord(true);
         instruction.setText(input);
-
 
         output = new JTextPane();
         output.setEditable(false);
@@ -99,7 +127,6 @@ public class AIQuickAction {
             }
         });
 
-
         JPopupMenu contextMenu = new JPopupMenu();
         contextMenu.add(new JMenuItem(new DefaultEditorKit.CopyAction()));
         contextMenu.add(new JMenuItem(new AbstractAction("Insert selection in editor") {
@@ -113,11 +140,15 @@ public class AIQuickAction {
 
         output.addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) show(e);
+                if (e.isPopupTrigger()) {
+                    show(e);
+                }
             }
 
             public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) show(e);
+                if (e.isPopupTrigger()) {
+                    show(e);
+                }
             }
 
             private void show(MouseEvent e) {
@@ -131,8 +162,7 @@ public class AIQuickAction {
             Utils.insertPayload(messageEditor, output.getText(), event);
         });
 
-
-        JComboBox<LLMConfig.QuickAction> comboBox = new JComboBox<>(this.aiConfiguration.config.quick_actions.toArray(new LLMConfig.QuickAction[0]));
+        JComboBox<LLMConfig.QuickAction> comboBox = new JComboBox<>(this.aiConfiguration.getQuickActions().toArray(new LLMConfig.QuickAction[0]));
 
         comboBox.addActionListener(e -> {
             LLMConfig.QuickAction item = (LLMConfig.QuickAction) comboBox.getSelectedItem();
@@ -140,7 +170,6 @@ public class AIQuickAction {
                 instruction.insert(item.content + " ", 0);
             }
         });
-
 
         JPanel middleButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         JButton applyButton = new JButton("Apply");
@@ -168,8 +197,8 @@ public class AIQuickAction {
         cancelButton.setEnabled(false);
 
         applyButton.addActionListener(e -> {
-            if (applyButton.getText().equals(BUTTON_CANCEL_SEND) && aiConfiguration.quickActionProvider != null) {
-                aiConfiguration.quickActionProvider.cancelCurrentQuickActionRequest();
+            if (applyButton.getText().equals(BUTTON_CANCEL_SEND) && aiConfiguration.getQuickActionProvider() != null) {
+                aiConfiguration.getQuickActionProvider().cancelCurrentQuickActionRequest();
                 applyButton.setText(BUTTON_TEXT_SEND);
                 statusLabel.setText("Cancelled");
                 return;
@@ -185,7 +214,7 @@ public class AIQuickAction {
                 cancelButton.setEnabled(true);
 
                 try {
-                    aiConfiguration.quickActionProvider.instruct(userInput, new AIProvider.StreamingCallback() {
+                    aiConfiguration.getQuickActionProvider().instruct(userInput, new AIProvider.StreamingCallback() {
                         @Override
                         public void onData(String chunk) {
                             if (!chunk.isEmpty()) {
@@ -216,10 +245,8 @@ public class AIQuickAction {
                     cancelButton.setEnabled(false);
                 }
 
-
             }
         });
-
 
         frame.addComponentListener(new ComponentAdapter() {
             @Override
@@ -237,7 +264,6 @@ public class AIQuickAction {
 
         JPanel centerPanel = new JPanel();
         centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
-
 
         JScrollPane scrollPane1 = new JScrollPane(instruction);
         outputScrollPane = new JScrollPane(output);

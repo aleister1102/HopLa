@@ -1,6 +1,5 @@
 package com.hopla;
 
-
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.EnhancedCapability;
 import burp.api.montoya.MontoyaApi;
@@ -9,21 +8,31 @@ import burp.api.montoya.extension.ExtensionUnloadingHandler;
 import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 import burp.api.montoya.ui.hotkey.HotKeyContext;
 import burp.api.montoya.ui.hotkey.HotKeyHandler;
+import burp.api.montoya.ui.settings.SettingsPanel;
+import burp.api.montoya.ui.settings.SettingsPanelBuilder;
+import burp.api.montoya.ui.settings.SettingsPanelPersistence;
+import burp.api.montoya.ui.settings.SettingsPanelSetting;
+import burp.api.montoya.ui.settings.SettingsPanelWithData;
 import com.hopla.ai.AIChats;
 import com.hopla.ai.AIConfiguration;
+import com.hopla.ai.AIProviderType;
 import com.hopla.ai.AIQuickAction;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.AWTEventListener;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.hopla.Constants.*;
 import static com.hopla.Utils.alert;
 import static com.hopla.Utils.getSelectedText;
 
 public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEventListener {
+
     public static MontoyaApi montoyaApi;
     public static LocalPayloadsManager localPayloadsManager;
     public static SearchReplaceWindow searchReplaceWindow;
@@ -40,6 +49,7 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
     private PayloadManager payloadManager;
     private AutoCompleteMenu autoCompleteMenu;
     private PayloadMenu payloadMenu;
+    private SettingsPanelWithData settingsPanel;
 
     @Override
     public void initialize(MontoyaApi montoyaApi) {
@@ -49,37 +59,57 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
         montoyaApi.extension().setName(Constants.EXTENSION_NAME);
         montoyaApi.extension().registerUnloadingHandler(this);
 
-        aiConfiguration = new AIConfiguration(montoyaApi);
+        // Build Settings Panel
+        List<String> providerNames = Arrays.stream(AIProviderType.values()).map(Enum::name).collect(Collectors.toList());
+
+        // General Settings
+        List<SettingsPanelSetting> settings = new ArrayList<>();
+        settings.add(SettingsPanelSetting.booleanSetting("Enable Shortcuts", true));
+        settings.add(SettingsPanelSetting.booleanSetting("Enable Autocompletion", true));
+        settings.add(SettingsPanelSetting.booleanSetting("Enable AI Autocompletion", false));
+        settings.add(SettingsPanelSetting.stringSetting("Chat Shortcut", "Ctrl+J"));
+        settings.add(SettingsPanelSetting.stringSetting("Quick Action Shortcut", "Ctrl+Shift+Q"));
+        settings.add(SettingsPanelSetting.integerSetting("Autocompletion Min Chars", 1));
+
+        settings.add(SettingsPanelSetting.listSetting("Default Chat Provider", providerNames, AIProviderType.OLLAMA.name()));
+        settings.add(SettingsPanelSetting.listSetting("Default Completion Provider", providerNames, AIProviderType.OLLAMA.name()));
+        settings.add(SettingsPanelSetting.listSetting("Default Quick Action Provider", providerNames, AIProviderType.OLLAMA.name()));
+
+        // Provider Settings
+        for (AIProviderType type : AIProviderType.values()) {
+            String prefix = type.name() + " - ";
+            settings.add(SettingsPanelSetting.booleanSetting(prefix + "Enabled", true));
+            settings.add(SettingsPanelSetting.stringSetting(prefix + "API Key", ""));
+            settings.add(SettingsPanelSetting.stringSetting(prefix + "Model", ""));
+
+            String defaultEndpoint = "";
+            if (type == AIProviderType.OLLAMA) {
+                defaultEndpoint = "http://localhost:11434";
+            }
+            settings.add(SettingsPanelSetting.stringSetting(prefix + "Endpoint", defaultEndpoint));
+        }
+
+        settingsPanel = SettingsPanelBuilder.settingsPanel()
+                .withPersistence(SettingsPanelPersistence.USER_SETTINGS)
+                .withTitle("HopLa Settings")
+                .withDescription("Configure HopLa extension settings.")
+                .withSettings(settings.toArray(new SettingsPanelSetting[0]))
+                .build();
+
+        montoyaApi.userInterface().registerSettingsPanel(settingsPanel);
+
+        // Initialize Configuration with SettingsPanel
+        aiConfiguration = new AIConfiguration(montoyaApi, settingsPanel);
         aiChats = new AIChats();
 
         aiQuickAction = new AIQuickAction(aiConfiguration);
 
-        aiAutocompletionEnabled = montoyaApi.persistence()
-                .preferences()
-                .getBoolean(PREFERENCE_AI);
-
-        if (aiAutocompletionEnabled == null) {
-            aiAutocompletionEnabled = Boolean.FALSE;
-        }
-
-        shortcutsEnabled = montoyaApi.persistence()
-                .preferences()
-                .getBoolean(PREFERENCE_SHORTCUTS);
-
-        if (shortcutsEnabled == null) {
-            shortcutsEnabled = Boolean.TRUE;
-        }
-
-        autocompletionEnabled = montoyaApi.persistence()
-                .preferences()
-                .getBoolean(PREFERENCE_AUTOCOMPLETION);
-
-        if (autocompletionEnabled == null) {
-            autocompletionEnabled = Boolean.TRUE;
-        }
+        // Load initial states from settings
+        aiAutocompletionEnabled = settingsPanel.getBoolean("Enable AI Autocompletion");
+        shortcutsEnabled = settingsPanel.getBoolean("Enable Shortcuts");
+        autocompletionEnabled = settingsPanel.getBoolean("Enable Autocompletion");
 
         montoyaApi.logging().logToOutput("AI configured: " + aiConfiguration.isAIConfigured);
-
 
         if (Constants.EXTERNAL_AI) {
             montoyaApi.logging().logToOutput("AI Autocompletion enabled: " + aiAutocompletionEnabled);
@@ -95,8 +125,7 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
         payloadMenu = new PayloadMenu(payloadManager, montoyaApi);
         aiChatPanel = new AIChatPanel(aiConfiguration, aiChats);
         montoyaApi.userInterface().registerContextMenuItemsProvider(new ContextMenu(montoyaApi, payloadManager));
-        new MenuBar(montoyaApi, this, payloadManager, aiConfiguration);
-
+        new MenuBar(montoyaApi, this, payloadManager);
 
         if (shortcutsEnabled) {
             enableShortcuts();
@@ -152,7 +181,6 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
         registrations.clear();
     }
 
-
     @Override
     public void eventDispatched(AWTEvent event) {
         if (event.getSource() instanceof JTextArea source) {
@@ -194,7 +222,6 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
         }
     }
 
-
     private void removeListeners() {
         Toolkit.getDefaultToolkit().removeAWTEventListener(this);
 
@@ -230,38 +257,54 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
         }
 
         this.registerShortcut(payloadManager.getPayloads().shortcut_payload_menu, "Payload Menu", event -> {
+            if (event.messageEditorRequestResponse().isEmpty()) {
+                return;
+            }
             MessageEditorHttpRequestResponse messageEditor = event.messageEditorRequestResponse().get();
             payloadMenu.show(messageEditor, event.inputEvent());
         });
 
         this.registerShortcut(payloadManager.getPayloads().shortcut_search_and_replace, "Search Replace", event -> {
+            if (event.messageEditorRequestResponse().isEmpty()) {
+                return;
+            }
             MessageEditorHttpRequestResponse messageEditor = event.messageEditorRequestResponse().get();
             searchReplaceWindow.attach(messageEditor, event.inputEvent(), getSelectedText(messageEditor));
         });
 
         this.registerShortcut(payloadManager.getPayloads().shortcut_add_custom_keyword, "Add custom keyword", event -> {
+            if (event.messageEditorRequestResponse().isEmpty()) {
+                return;
+            }
             MessageEditorHttpRequestResponse messageEditor = event.messageEditorRequestResponse().get();
             HopLa.localPayloadsManager.add(getSelectedText(messageEditor));
         });
 
         this.registerShortcut(payloadManager.getPayloads().shortcut_collaborator, "Collaborator", event -> {
+            if (event.messageEditorRequestResponse().isEmpty()) {
+                return;
+            }
             MessageEditorHttpRequestResponse messageEditor = event.messageEditorRequestResponse().get();
             Utils.InsertCollaboratorPayload(montoyaApi, messageEditor, event.inputEvent());
         });
 
         if (aiConfiguration.isAIConfigured) {
-            this.registerShortcut(aiConfiguration.config.shortcut_ai_chat, "AI chat", event -> {
+            this.registerShortcut(aiConfiguration.getChatShortcut(), "AI chat", event -> {
+                if (event.messageEditorRequestResponse().isEmpty()) {
+                    return;
+                }
                 MessageEditorHttpRequestResponse messageEditor = event.messageEditorRequestResponse().get();
                 aiChatPanel.show(messageEditor, event.inputEvent(), getSelectedText(messageEditor));
             });
-            this.registerShortcut(aiConfiguration.config.shortcut_quick_action, "AI Quick action", event -> {
+            this.registerShortcut(aiConfiguration.getQuickActionShortcut(), "AI Quick action", event -> {
+                if (event.messageEditorRequestResponse().isEmpty()) {
+                    return;
+                }
                 MessageEditorHttpRequestResponse messageEditor = event.messageEditorRequestResponse().get();
                 aiQuickAction.show(messageEditor, event.inputEvent(), getSelectedText(messageEditor));
             });
 
-
         }
-
 
     }
 
@@ -287,7 +330,6 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
             }
         }
     }
-
 
     private void registerShortcut(String shortcut, String message, HotKeyHandler handler) {
         String normalizedShortcut = Utils.normalizeShortcut(shortcut);

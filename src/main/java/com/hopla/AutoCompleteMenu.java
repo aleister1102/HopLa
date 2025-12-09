@@ -1,13 +1,10 @@
 package com.hopla;
 
-import burp.api.montoya.MontoyaApi;
-import com.hopla.ai.AIConfiguration;
-
-import javax.swing.*;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.Document;
-import javax.swing.text.JTextComponent;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -17,11 +14,25 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
+import javax.swing.JList;
+import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
+import javax.swing.JWindow;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingWorker;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.Document;
+import javax.swing.text.JTextComponent;
+
 import static com.hopla.Constants.DEBUG;
 import static com.hopla.Utils.alert;
 import static com.hopla.Utils.generateJWindow;
+import com.hopla.ai.AIConfiguration;
+
+import burp.api.montoya.MontoyaApi;
 
 public class AutoCompleteMenu {
+
     public static final String CUSTOM_KEYWORD_SEPARATOR = " [CUSTOM]-> ";
     public static final String AI_KEYWORD_SEPARATOR = " [AI] ";
     private static final int MAX_VISIBLE_ROWS = 10;
@@ -55,10 +66,10 @@ public class AutoCompleteMenu {
         suggestionList.setLayoutOrientation(JList.VERTICAL);
         suggestionList.setFocusable(false);
         suggestionList.setVisibleRowCount(MIN_VISIBLE_ROWS);
-        suggestionList.setBackground(new Color(31, 41, 55));
-        suggestionList.setForeground(new Color(229, 231, 235));
-        suggestionList.setSelectionBackground(new Color(59, 68, 85));
-        suggestionList.setSelectionForeground(new Color(229, 231, 235));
+        suggestionList.setBackground(ThemeUtils.getBackgroundColor(api));
+        suggestionList.setForeground(ThemeUtils.getForegroundColor(api));
+        suggestionList.setSelectionBackground(ThemeUtils.getSelectionBackgroundColor(api));
+        suggestionList.setSelectionForeground(ThemeUtils.getSelectionForegroundColor(api));
         suggestionList.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 // Double click
@@ -69,8 +80,8 @@ public class AutoCompleteMenu {
         });
         JScrollPane scrollPane = new JScrollPane(suggestionList, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setPreferredSize(new Dimension(FRAME_WIDTH, FRAME_HEIGHT));
-        scrollPane.getViewport().setBackground(new Color(31, 41, 55));
-        frame.getContentPane().setBackground(new Color(31, 41, 55));
+        scrollPane.getViewport().setBackground(ThemeUtils.getBackgroundColor(api));
+        frame.getContentPane().setBackground(ThemeUtils.getBackgroundColor(api));
         hBar = scrollPane.getHorizontalScrollBar();
         frame.getContentPane().add(scrollPane, BorderLayout.CENTER);
     }
@@ -82,9 +93,9 @@ public class AutoCompleteMenu {
 
         List<String> suggestions = this.payloadManager.getSuggestions(input);
 
-        if (Constants.EXTERNAL_AI && hopla.aiAutocompletionEnabled && aiConfiguration.isAIConfigured && input.length() > HopLa.aiConfiguration.config.autocompletion_min_chars) {
-            debouncer.trigger(() ->
-                    new AICompletion(suggestionList, suggestions, input, caretContext)
+        if (Constants.EXTERNAL_AI && hopla.aiAutocompletionEnabled && aiConfiguration.isAIConfigured && input.length() > aiConfiguration.getAutocompletionMinChars()) {
+            debouncer.trigger(()
+                    -> new AICompletion(suggestionList, suggestions, input, caretContext)
             );
         }
 
@@ -174,8 +185,9 @@ public class AutoCompleteMenu {
             val = val.split(Pattern.quote(AI_KEYWORD_SEPARATOR))[1];
         }
 
-
-        if (val == null || source == null) return;
+        if (val == null || source == null) {
+            return;
+        }
         try {
             Document doc = source.getDocument();
             doc.remove(caretStart, caretPos - caretStart);
@@ -203,6 +215,7 @@ public class AutoCompleteMenu {
     }
 
     public static class DebouncedSwingWorker<T, V> {
+
         private Supplier<SwingWorker<T, V>> workerSupplier;
         private SwingWorker<T, V> currentWorker;
 
@@ -225,6 +238,7 @@ public class AutoCompleteMenu {
     }
 
     class AICompletion extends SwingWorker<List<String>, Void> {
+
         private final JList<String> suggestionList;
         private final List<String> suggestions;
         private final Completer.CaretContext caretContext;
@@ -240,7 +254,7 @@ public class AutoCompleteMenu {
         @Override
         protected List<String> doInBackground() throws Exception {
             try {
-                return HopLa.aiConfiguration.completionProvider.autoCompletion(this.caretContext);
+                return HopLa.aiConfiguration.getCompletionProvider().autoCompletion(this.caretContext);
             } catch (Exception e) {
                 api.logging().logToError("AI Completion cancelled, input: " + input);
                 throw e;
