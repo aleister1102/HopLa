@@ -252,7 +252,11 @@ public class OllamaProvider extends AIProvider {
         new Thread(() -> {
             try (Response response = call.execute()) {
                 if (!response.isSuccessful()) {
-                    callback.onError("AI API error : " + response.code() + "\n" + Objects.requireNonNull(response.body()).string());
+                    String errorMsg = "AI API error : " + response.code() + "\n" + Objects.requireNonNull(response.body()).string();
+                    if (response.code() == 405) {
+                        errorMsg += "\nPossible cause: Invalid endpoint URL (e.g. missing /api/chat) or protocol mismatch (HTTP vs HTTPS).";
+                    }
+                    callback.onError(errorMsg);
                     return;
                 }
 

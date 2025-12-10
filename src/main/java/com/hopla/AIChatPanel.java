@@ -626,20 +626,26 @@ public class AIChatPanel {
     }
 
     private void generateTitleAsync(AIChats.Chat chat) {
-        String currentTitle = chat.getTitle();
-        if (currentTitle != null && !currentTitle.isBlank() && !currentTitle.equals(chat.timestamp)) {
-            return;
-        }
-        AIChats.Message lastUser = chat.getLastUserMessage();
-        if (lastUser == null) {
-            return;
-        }
-        String base = lastUser.getContent();
-        if (base == null || base.isBlank()) {
+        if (chat.getMessages().isEmpty()) {
             return;
         }
 
-        String fallback = sanitizeTitle(base);
+        // Use up to the last 6 messages to generate the title
+        java.util.List<AIChats.Message> messages = chat.getMessages();
+        int start = Math.max(0, messages.size() - 6);
+        StringBuilder conversation = new StringBuilder();
+        for (int i = start; i < messages.size(); i++) {
+            AIChats.Message msg = messages.get(i);
+            conversation.append(msg.getRole()).append(": ").append(msg.getContent()).append("\n");
+        }
+        String base = conversation.toString();
+
+        String fallback = "New Chat";
+        AIChats.Message lastUser = chat.getLastUserMessage();
+        if (lastUser != null && lastUser.getContent() != null && !lastUser.getContent().isBlank()) {
+            fallback = sanitizeTitle(lastUser.getContent());
+        }
+
         if (!EXTERNAL_AI) {
             chat.setTitle(fallback);
             chats.save();
@@ -648,8 +654,9 @@ public class AIChatPanel {
         }
         try {
             AIProvider p = aiConfiguration.getChatProvider();
-            String prompt = "Generate a concise, meaningful chat title (3-6 words) based on this text. Return only the title without punctuation: \n" + base;
+            String prompt = "Generate a concise, meaningful chat title (3-6 words) based on this conversation summary. Return only the title without punctuation: \n" + base;
             StringBuilder sb = new StringBuilder();
+            String finalFallback = fallback;
             p.instruct(prompt, new AIProvider.StreamingCallback() {
                 @Override
                 public void onData(String chunk) {
@@ -659,14 +666,14 @@ public class AIChatPanel {
                 @Override
                 public void onDone() {
                     String title = sanitizeTitle(sb.toString());
-                    chat.setTitle(title.isBlank() ? fallback : title);
+                    chat.setTitle(title.isBlank() ? finalFallback : title);
                     chats.save();
                     SwingUtilities.invokeLater(() -> loadChatList());
                 }
 
                 @Override
                 public void onError(String error) {
-                    chat.setTitle(fallback);
+                    chat.setTitle(finalFallback);
                     chats.save();
                     SwingUtilities.invokeLater(() -> loadChatList());
                 }

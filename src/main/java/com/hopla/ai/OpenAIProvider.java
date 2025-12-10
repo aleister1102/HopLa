@@ -1,14 +1,5 @@
 package com.hopla.ai;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.hopla.Completer;
-import com.hopla.HopLa;
-import okhttp3.Call;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -17,13 +8,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.hopla.Completer;
 import static com.hopla.Constants.DEBUG_AI;
+import com.hopla.HopLa;
+
+import okhttp3.Call;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class OpenAIProvider extends AIProvider {
+
     public OpenAIProvider(LLMConfig config, LLMConfig.Provider providerConfig) {
         super(AIProviderType.OPENAI, AIProviderType.OPENAI.toString(), config, providerConfig);
     }
-
 
     // No fim on openai
     @Override
@@ -90,7 +90,8 @@ public class OpenAIProvider extends AIProvider {
             messages.add(notesMessage);
         }
 
-        for (AIChats.Message message : chat.getMessages()) {
+        int endIdx = Math.max(0, chat.getMessages().size() - 1);
+        for (AIChats.Message message : chat.getMessages().subList(0, endIdx)) {
             JsonObject userMessage = new JsonObject();
             userMessage.addProperty("role", message.getRole().toString().toLowerCase());
             userMessage.addProperty("content", message.getContent());
@@ -127,14 +128,20 @@ public class OpenAIProvider extends AIProvider {
         new Thread(() -> {
             try (Response response = call.execute()) {
                 if (!response.isSuccessful()) {
-                    callback.onError("AI API error : " + response.code() + "\n" + Objects.requireNonNull(response.body()).string());
+                    String errorMsg = "AI API error : " + response.code() + "\n" + Objects.requireNonNull(response.body()).string();
+                    if (response.code() == 405) {
+                        errorMsg += "\nPossible cause: Invalid endpoint URL (e.g. missing /v1/chat/completions) or protocol mismatch (HTTP vs HTTPS).";
+                    }
+                    callback.onError(errorMsg);
                     return;
                 }
 
                 BufferedReader reader = new BufferedReader(new InputStreamReader(response.body().byteStream()));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (Thread.currentThread().isInterrupted()) break;
+                    if (Thread.currentThread().isInterrupted()) {
+                        break;
+                    }
                     JsonObject responseJson = gson.fromJson(line, JsonObject.class);
 
                     JsonArray choices = responseJson.getAsJsonArray("choices");

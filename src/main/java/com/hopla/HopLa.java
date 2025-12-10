@@ -17,6 +17,7 @@ import com.hopla.ai.AIChats;
 import com.hopla.ai.AIConfiguration;
 import com.hopla.ai.AIProviderType;
 import com.hopla.ai.AIQuickAction;
+import com.hopla.ai.AIAgent;
 
 import javax.swing.*;
 import java.awt.*;
@@ -41,6 +42,7 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
     public static AIConfiguration aiConfiguration;
     public static AIChats aiChats;
     public static AIQuickAction aiQuickAction;
+    public static AIAgent aiAgent;
     private static String extensionName;
     private final ArrayList<Completer> listeners = new ArrayList<>();
     private final ArrayList<Registration> registrations = new ArrayList<Registration>();
@@ -105,6 +107,7 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
         aiChats = new AIChats();
 
         aiQuickAction = new AIQuickAction(aiConfiguration);
+        aiAgent = new AIAgent(aiConfiguration);
 
         // Load initial states from settings
         aiAutocompletionEnabled = settingsPanel.getBoolean("Enable AI Autocompletion");

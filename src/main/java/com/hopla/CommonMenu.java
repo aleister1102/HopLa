@@ -116,6 +116,19 @@ public class CommonMenu {
             actionHandler.run();
         });
 
+        JMenuItem aiAgentScanMenu = new JMenuItem("AI Agent Scan");
+        aiAgentScanMenu.setHorizontalTextPosition(SwingConstants.LEFT);
+        items.add(aiAgentScanMenu);
+        aiAgentScanMenu.addActionListener(e -> {
+            if (!this.api.ai().isEnabled() && !Constants.EXTERNAL_AI) {
+                Utils.alert(Constants.ERROR_BURP_AI_DISABLED);
+                return;
+            }
+
+            HopLa.aiAgent.run(messageEditor.requestResponse().request());
+            actionHandler.run();
+        });
+
         return items;
 
     }
