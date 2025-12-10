@@ -23,6 +23,7 @@ import java.awt.*;
 import java.awt.event.AWTEventListener;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -43,6 +44,7 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
     private static String extensionName;
     private final ArrayList<Completer> listeners = new ArrayList<>();
     private final ArrayList<Registration> registrations = new ArrayList<Registration>();
+    private final Set<String> registeredShortcuts = new HashSet<>();
     public Boolean autocompletionEnabled;
     public Boolean shortcutsEnabled;
     public Boolean aiAutocompletionEnabled;
@@ -179,6 +181,7 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
             registration.deregister();
         }
         registrations.clear();
+        registeredShortcuts.clear();
     }
 
     @Override
@@ -333,11 +336,21 @@ public class HopLa implements BurpExtension, ExtensionUnloadingHandler, AWTEvent
 
     private void registerShortcut(String shortcut, String message, HotKeyHandler handler) {
         String normalizedShortcut = Utils.normalizeShortcut(shortcut);
+        if (normalizedShortcut == null) {
+            return;
+        }
+
+        if (registeredShortcuts.contains(normalizedShortcut)) {
+            montoyaApi.logging().logToError("Duplicate shortcut in HopLa: " + normalizedShortcut + " - " + message);
+            return;
+        }
+
         Registration registration = montoyaApi.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, normalizedShortcut, handler);
 
         if (registration.isRegistered()) {
             montoyaApi.logging().logToOutput("Successfully registered hotkey handler: " + normalizedShortcut + " - " + message);
             registrations.add(registration);
+            registeredShortcuts.add(normalizedShortcut);
         } else {
             montoyaApi.logging().logToError("Failed to register hotkey handler: " + normalizedShortcut + " - " + message);
             alert("Failed to register hotkey handler: " + normalizedShortcut);
